@@ -36,7 +36,6 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
     LLnode* input_node = ll_pop_node(&sender->input_framelist_head);
     Frame* ack = input_node->value; // ack will be free'd via ll_destroy_node(input_node)
-    printf("ack received %d\n", ack->seq_num);
     if (ack->src_id == sender->send_id && ack->seq_num == sender->last_sent_frame->seq_num) {
 
         int buffer_length = ll_get_length(sender->frame_buffer_head);
@@ -116,7 +115,6 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             remaining -= outgoing_frame->length;
             count++;
         }
-        int sanity_length = ll_get_length(*outgoing_frames_head_ptr);
 
         free(outgoing_cmd->message);
         free(outgoing_cmd);
@@ -220,7 +218,6 @@ void* run_sender(void* input_sender) {
             char* char_buf = (char*) ll_outframe_node->value;
             // Don't worry about freeing the char_buf, the following function
             // does that
-            printf("sent frame\n");
 
             send_msg_to_receivers(char_buf);
 

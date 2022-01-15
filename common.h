@@ -78,6 +78,7 @@ struct Receiver_t {
 
     LLnode** ingoing_frames_head_ptr_map;
     int last_received_seq_num_map[MAX_CLIENTS];
+
 };
 
 struct Sender_t {
