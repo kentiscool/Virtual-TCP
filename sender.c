@@ -1,4 +1,5 @@
 #include "sender.h"
+#include <stdbool.h>
 
 #include <assert.h>
 
@@ -8,12 +9,17 @@ void init_sender(Sender* sender, int id) {
     sender->send_id = id;
     sender->input_cmdlist_head = NULL;
     sender->input_framelist_head = NULL;
-    // TODO: You should fill in this function as necessary
+    sender->blocked = false;
+
+    sender->frame_buffer_head = NULL;
+    sender->last_sent_frame = NULL;
 }
 
 struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
     // TODO: You should fill in this function so that it returns the next
     // timeout that should occur
+    struct timeval* curr_timeval;
+
     return NULL;
 }
 
@@ -23,6 +29,30 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     //    2) Convert the char * buffer to a Frame data type
     //    3) Check whether the frame is for this sender
     //    4) Do stop-and-wait for sender/receiver pair
+    int input_length = ll_get_length(sender->input_framelist_head);
+    if (input_length == 0) {
+        return;
+    }
+
+    LLnode* input_node = ll_pop_node(&sender->input_framelist_head);
+    Frame* ack = input_node->value; // ack will be free'd via ll_destroy_node(input_node)
+    printf("ack received %d\n", ack->seq_num);
+    if (ack->src_id == sender->send_id && ack->seq_num == sender->last_sent_frame->seq_num) {
+
+        int buffer_length = ll_get_length(sender->frame_buffer_head);
+        if (buffer_length > 0) {
+            free(sender->last_sent_frame);
+            LLnode* new_frame_node = ll_pop_node(&sender->frame_buffer_head);
+            Frame* new_frame = new_frame_node->value;
+            char* outgoing_charbuf = convert_frame_to_char(new_frame);
+            ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
+            int sanity_test= ll_get_length(*outgoing_frames_head_ptr);
+            free(new_frame_node);
+            sender->last_sent_frame = new_frame;
+        }
+    }
+
+    ll_destroy_node(input_node);
 }
 
 void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
@@ -32,10 +62,9 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     //    3) Set up the frame according to the protocol
 
     int input_cmd_length = ll_get_length(sender->input_cmdlist_head);
-
     // Recheck the command queue length to see if stdin_thread dumped a command
     // on us
-    input_cmd_length = ll_get_length(sender->input_cmdlist_head);
+
     while (input_cmd_length > 0) {
         // Pop a node off and update the input_cmd_length
         LLnode* ll_input_cmd_node = ll_pop_node(&sender->input_cmdlist_head);
@@ -45,35 +74,52 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
         Cmd* outgoing_cmd = (Cmd*) ll_input_cmd_node->value;
         free(ll_input_cmd_node);
 
-        // DUMMY CODE: Add the raw char buf to the outgoing_frames list
-        // NOTE: You should not blindly send this message out!
-        //      Ask yourself: Is this message actually going to the right
-        //      receiver (recall that default behavior of send is to broadcast
-        //      to all receivers)?
-        //                    Were the previous messages sent to this receiver
-        //                    ACTUALLY delivered to the receiver?
-        int msg_length = strlen(outgoing_cmd->message);
-        if (msg_length > MAX_FRAME_SIZE) {
-            // Do something about messages that exceed the frame size
-            printf(
-                "<SEND_%d>: sending messages of length greater than %d is not "
-                "implemented\n",
-                sender->send_id, MAX_FRAME_SIZE);
-        } else {
-            // This is probably ONLY one step you want
-            Frame* outgoing_frame = malloc(sizeof(Frame));
-            assert(outgoing_frame);
-            strcpy(outgoing_frame->data, outgoing_cmd->message);
-
-            // At this point, we don't need the outgoing_cmd
+        if (outgoing_cmd->src_id != sender->send_id) {
             free(outgoing_cmd->message);
             free(outgoing_cmd);
-
-            // Convert the message to the outgoing_charbuf
-            char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
-            ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
-            free(outgoing_frame);
+            continue;
         }
+
+        int msg_length = strlen(outgoing_cmd->message);
+        int remaining = msg_length;
+        int count = 0;
+
+        while (remaining > 0) {
+            Frame* outgoing_frame = malloc(MAX_FRAME_SIZE);
+            int idx = msg_length - remaining;
+
+            outgoing_frame->src_id = outgoing_cmd->src_id;
+            outgoing_frame->dst_id = outgoing_cmd->dst_id;
+            outgoing_frame->seq_num = count % 2;
+
+            if (remaining > FRAME_PAYLOAD_SIZE) {
+                outgoing_frame->is_last = 0;
+                outgoing_frame->length = FRAME_PAYLOAD_SIZE;
+            } else {
+                outgoing_frame->is_last = 1;
+                outgoing_frame->length = remaining ; // +1 for null terminator
+            }
+
+            for (int i = 0; i < outgoing_frame->length; i++) {
+                outgoing_frame->data[i] = outgoing_cmd->message[i + idx];
+            }
+
+            char* outgoing_charbuf = convert_frame_to_char(outgoing_frame);
+            int buffer_length = ll_get_length(sender->frame_buffer_head);
+            if (buffer_length == 0 && ll_get_length(*outgoing_frames_head_ptr) == 0) {
+                sender->last_sent_frame = outgoing_frame;
+                ll_append_node(outgoing_frames_head_ptr, outgoing_charbuf);
+            } else {
+                ll_append_node(&sender->frame_buffer_head, outgoing_frame);
+            }
+
+            remaining -= outgoing_frame->length;
+            count++;
+        }
+        int sanity_length = ll_get_length(*outgoing_frames_head_ptr);
+
+        free(outgoing_cmd->message);
+        free(outgoing_cmd);
     }
 }
 
@@ -87,9 +133,10 @@ void* run_sender(void* input_sender) {
     const int WAIT_SEC_TIME = 0;
     const long WAIT_USEC_TIME = 100000;
     Sender* sender = (Sender*) input_sender;
-    LLnode* outgoing_frames_head;
+    LLnode** outgoing_frames_head;
     struct timeval* expiring_timeval;
     long sleep_usec_time, sleep_sec_time;
+    outgoing_frames_head = NULL;
 
     // This incomplete sender thread, at a high level, loops as follows:
     // 1. Determine the next time the thread should wake up
@@ -100,7 +147,6 @@ void* run_sender(void* input_sender) {
     // 5. Sends out the messages
 
     while (1) {
-        outgoing_frames_head = NULL;
 
         // Get the current time
         gettimeofday(&curr_timeval, NULL);
@@ -161,7 +207,6 @@ void* run_sender(void* input_sender) {
 
         // Implement this
         handle_input_cmds(sender, &outgoing_frames_head);
-
         pthread_mutex_unlock(&sender->buffer_mutex);
 
         // Implement this
@@ -170,13 +215,13 @@ void* run_sender(void* input_sender) {
         // CHANGE THIS AT YOUR OWN RISK!
         // Send out all the frames
         int ll_outgoing_frame_length = ll_get_length(outgoing_frames_head);
-
         while (ll_outgoing_frame_length > 0) {
             LLnode* ll_outframe_node = ll_pop_node(&outgoing_frames_head);
             char* char_buf = (char*) ll_outframe_node->value;
-
             // Don't worry about freeing the char_buf, the following function
             // does that
+            printf("sent frame\n");
+
             send_msg_to_receivers(char_buf);
 
             // Free up the ll_outframe_node

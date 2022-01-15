@@ -12,6 +12,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #define MAX_COMMAND_LENGTH 16
 #define AUTOMATED_FILENAME 512
@@ -46,6 +47,23 @@ struct LLnode_t {
 };
 typedef struct LLnode_t LLnode;
 
+#define MAX_FRAME_SIZE 64
+
+// TODO: You should change this!
+// Remember, your frame can be AT MOST 64 bytes!
+#define FRAME_PAYLOAD_SIZE 59
+struct Frame_t {
+    unsigned char src_id;
+    unsigned char dst_id;
+    unsigned char length;
+    unsigned char seq_num;
+    char is_last;
+    char data[FRAME_PAYLOAD_SIZE];
+};
+typedef struct Frame_t Frame;
+
+#define MAX_CLIENTS 256
+
 // Receiver and sender data structures
 struct Receiver_t {
     // DO NOT CHANGE:
@@ -56,8 +74,10 @@ struct Receiver_t {
     pthread_mutex_t buffer_mutex;
     pthread_cond_t buffer_cv;
     LLnode* input_framelist_head;
-
     int recv_id;
+
+    LLnode** ingoing_frames_head_ptr_map;
+    int last_received_seq_num_map[MAX_CLIENTS];
 };
 
 struct Sender_t {
@@ -72,22 +92,17 @@ struct Sender_t {
     LLnode* input_cmdlist_head;
     LLnode* input_framelist_head;
     int send_id;
+
+    LLnode* frame_buffer_head;
+    Frame* last_sent_frame;
+
+    bool blocked;
 };
 
 enum SendFrame_DstType { ReceiverDst, SenderDst } SendFrame_DstType;
 
 typedef struct Sender_t Sender;
 typedef struct Receiver_t Receiver;
-
-#define MAX_FRAME_SIZE 64
-
-// TODO: You should change this!
-// Remember, your frame can be AT MOST 64 bytes!
-#define FRAME_PAYLOAD_SIZE 64
-struct Frame_t {
-    char data[FRAME_PAYLOAD_SIZE];
-};
-typedef struct Frame_t Frame;
 
 // Declare global variables here
 // DO NOT CHANGE:

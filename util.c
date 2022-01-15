@@ -28,8 +28,7 @@ void ll_append_node(LLnode** head_ptr, void* value) {
     // Init the value pntr
     head = (*head_ptr);
     new_node = (LLnode*) malloc(sizeof(LLnode));
-    new_node->value = value;
-
+    new_node->value = (char *)value;
     // The list is empty, no node is currently present
     if (head == NULL) {
         (*head_ptr) = new_node;
@@ -77,7 +76,7 @@ LLnode* ll_pop_node(LLnode** head_ptr) {
 
 void ll_destroy_node(LLnode* node) {
     if (node->type == llt_string) {
-        free((char*) node->value);
+        free(node->value);
     }
     free(node);
 }
@@ -107,3 +106,9 @@ Frame* convert_char_to_frame(char* char_buf) {
     memcpy(frame, char_buf, sizeof(Frame));
     return frame;
 }
+
+int min(int a, int b) {
+    return a < b ? a : b;
+}
+
+

@@ -5,6 +5,11 @@ void init_receiver(Receiver* receiver, int id) {
     pthread_mutex_init(&receiver->buffer_mutex, NULL);
     receiver->recv_id = id;
     receiver->input_framelist_head = NULL;
+    receiver->ingoing_frames_head_ptr_map = malloc(MAX_CLIENTS * sizeof(LLnode *));
+
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        receiver->ingoing_frames_head_ptr_map[i] = NULL;
+    }
 }
 
 void handle_incoming_msgs(Receiver* receiver,
@@ -14,26 +19,57 @@ void handle_incoming_msgs(Receiver* receiver,
     //    2) Convert the char * buffer to a Frame data type
     //    3) Check whether the frame is for this receiver
     //    4) Acknowledge that this frame was received
-
     int incoming_msgs_length = ll_get_length(receiver->input_framelist_head);
+
+    LLnode* outgoing_frames_head = NULL;
+
     while (incoming_msgs_length > 0) {
+        printf("handle_incoming_msgs\n");
         // Pop a node off the front of the link list and update the count
         LLnode* ll_inmsg_node = ll_pop_node(&receiver->input_framelist_head);
         incoming_msgs_length = ll_get_length(receiver->input_framelist_head);
 
-        // DUMMY CODE: Print the raw_char_buf
-        // NOTE: You should not blindly print messages!
-        //      Ask yourself: Is this message really for me?
         char* raw_char_buf = ll_inmsg_node->value;
-        Frame* inframe = convert_char_to_frame(raw_char_buf);
 
-        // Free raw_char_buf
+        Frame* ingoing_frame = convert_char_to_frame(raw_char_buf);
+
+        free(ll_inmsg_node);
         free(raw_char_buf);
 
-        printf("<RECV_%d>:[%s]\n", receiver->recv_id, inframe->data);
+        if (ingoing_frame->dst_id != receiver->recv_id) {
+            free(ingoing_frame);
+            continue;
+        }
 
-        free(inframe);
-        free(ll_inmsg_node);
+        char* segment = malloc(ingoing_frame->length);
+
+        memcpy(segment, ingoing_frame->data,ingoing_frame->length);
+
+        ll_append_node(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id, segment);
+
+        Frame* ack = malloc(MAX_FRAME_SIZE);
+        ack->seq_num = ingoing_frame->seq_num;
+        ack->src_id = ingoing_frame->src_id;
+        ack->dst_id = ingoing_frame->dst_id;
+
+        ll_append_node(outgoing_frames_head_ptr, ack);
+        printf("received frame \n");
+        if (ingoing_frame->is_last == 1) {
+            int frames = ll_get_length(*(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id));
+            char* msg = malloc(frames * FRAME_PAYLOAD_SIZE);
+            while (frames > 0) {
+                LLnode* cur_node = ll_pop_node(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id);
+                char* cur_segment = malloc(strlen(cur_node->value));
+                memcpy(cur_segment, cur_node->value, strlen(cur_node->value));
+                strcat(msg, cur_segment);
+                ll_destroy_node(cur_node);
+                frames = ll_get_length(*(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id));
+            }
+            printf("<RECV_%d>:[%s]\n", receiver->recv_id, msg);
+            free(msg);
+        }
+
+        free(ingoing_frame);
     }
 }
 
@@ -43,7 +79,7 @@ void* run_receiver(void* input_receiver) {
     const int WAIT_SEC_TIME = 0;
     const long WAIT_USEC_TIME = 100000;
     Receiver* receiver = (Receiver*) input_receiver;
-    LLnode* outgoing_frames_head;
+    LLnode* outgoing_frames_head; // Chanel where all messages will be sent through
 
     // This incomplete receiver thread, at a high level, loops as follows:
     // 1. Determine the next time the thread should wake up if there is nothing
@@ -100,6 +136,7 @@ void* run_receiver(void* input_receiver) {
         while (ll_outgoing_frame_length > 0) {
             LLnode* ll_outframe_node = ll_pop_node(&outgoing_frames_head);
             char* char_buf = (char*) ll_outframe_node->value;
+            Frame* ack = convert_char_to_frame(char_buf);
 
             // The following function frees the memory for the char_buf object
             send_msg_to_senders(char_buf);
