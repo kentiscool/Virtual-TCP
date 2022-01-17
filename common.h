@@ -51,7 +51,7 @@ typedef struct LLnode_t LLnode;
 #define GENERATOR 9
 // TODO: You should change this!
 // Remember, your frame can be AT MOST 64 bytes!
-#define FRAME_PAYLOAD_SIZE 59
+#define FRAME_PAYLOAD_SIZE 51
 struct Frame_t {
     unsigned char src_id;
     unsigned char dst_id;
@@ -59,7 +59,7 @@ struct Frame_t {
     unsigned char seq_num;
     char is_last;
     char data[FRAME_PAYLOAD_SIZE];
-//    unsigned int checksum;
+    int checksum;
 };
 typedef struct Frame_t Frame;
 

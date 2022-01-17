@@ -113,19 +113,14 @@ Frame* copy_frame(Frame* frame) {
     return (Frame *) new_frame;
 }
 
-int min(int a, int b) {
-    return a < b ? a : b;
-}
-
-int checksum(Frame* frame, int g)  {
+int checksum(Frame* frame)  {
     int sum = 0;
     char* data = convert_frame_to_char(frame);
-    for (int i = 0; i < MAX_FRAME_SIZE - 1; i++) {
+    for (int i = 0; i < MAX_FRAME_SIZE - 8; i++) {
         sum += (int) data[i];
     }
     free(data);
-    return sum % g;
+    return sum;
 }
-
 
 

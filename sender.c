@@ -26,32 +26,28 @@ struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
 }
 
 void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
-    // TODO: Suggested steps for handling incoming ACKs
-    //    1) Dequeue the ACK from the sender->input_framelist_head
-    //    2) Convert the char * buffer to a Frame data type
-    //    3) Check whether the frame is for this sender
-    //    4) Do stop-and-wait for sender/receiver pair
     int input_length = ll_get_length(sender->input_framelist_head);
     if (input_length == 0) {
         return;
     }
 
+    // Retrieve ack from input_framelist_head
     LLnode* input_node = ll_pop_node(&sender->input_framelist_head);
     Frame* ack = input_node->value; // ack will be free'd via ll_destroy_node(input_node)
 
-    if (ack->src_id == sender->send_id && ack->seq_num == sender->last_sent_frame->seq_num) {
+    if (ack->src_id == sender->send_id && ack->seq_num == sender->last_sent_frame->seq_num && checksum(ack) == ack->checksum) {
         int buffer_length = ll_get_length(sender->frame_buffer_head);
-        if (buffer_length > 0) {
+        if (buffer_length > 0) { // Send next frame
             if (sender->last_sent_frame != NULL) {
                 free(sender->last_sent_frame);
             }
-
             LLnode* new_frame_node = ll_pop_node(&sender->frame_buffer_head);
             Frame* new_frame = new_frame_node->value;
             ll_append_node(outgoing_frames_head_ptr, copy_frame(new_frame));
             sender->last_sent_frame = copy_frame(new_frame);
             ll_destroy_node(new_frame_node);
-
+        } else {
+            sender->last_sent_frame = NULL;
         }
     }
 
@@ -59,14 +55,7 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 }
 
 void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
-    // TODO: Suggested steps for handling input cmd
-    //    1) Dequeue the Cmd from sender->input_cmdlist_head
-    //    2) Convert to Frame
-    //    3) Set up the frame according to the protocol
-
     int input_cmd_length = ll_get_length(sender->input_cmdlist_head);
-    // Recheck the command queue length to see if stdin_thread dumped a command
-    // on us
 
     while (input_cmd_length > 0) {
         // Pop a node off and update the input_cmd_length
@@ -109,11 +98,15 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             remaining -= outgoing_frame->length;
 
             // Copy data
-            for (int i = 0; i < outgoing_frame->length; i++) {
-                outgoing_frame->data[i] = outgoing_cmd->message[i + idx];
+            for (int i = 0; i < MAX_FRAME_SIZE; i++) {
+                if (i < outgoing_frame->length) {
+                    outgoing_frame->data[i] = outgoing_cmd->message[i + idx];
+                } else {
+                    outgoing_frame->data[i] = 0;
+                }
             }
 
-//            outgoing_frame->checksum = checksum(outgoing_frame, GENERATOR);
+            outgoing_frame->checksum = checksum(outgoing_frame);
 
             int buffer_length = ll_get_length(sender->frame_buffer_head);
             if (buffer_length == 0 && ll_get_length(*outgoing_frames_head_ptr) == 0) {
@@ -229,7 +222,6 @@ void* run_sender(void* input_sender) {
         int ll_outgoing_frame_length = ll_get_length(outgoing_frames_head);
         while (ll_outgoing_frame_length > 0) {
             LLnode* ll_outframe_node = ll_pop_node(&outgoing_frames_head);
-
             send_msg_to_receivers(convert_frame_to_char(ll_outframe_node->value));
             struct timeval next_time_out = curr_timeval;
             next_time_out.tv_sec = (next_time_out.tv_sec + 90000) / 1000000;

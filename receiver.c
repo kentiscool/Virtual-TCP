@@ -6,7 +6,6 @@ void init_receiver(Receiver* receiver, int id) {
     receiver->recv_id = id;
     receiver->input_framelist_head = NULL;
     receiver->ingoing_frames_head_ptr_map = malloc(MAX_CLIENTS * sizeof(LLnode *));
-//    receiver->last_received_seq_num_map = (int*) malloc(MAX_CLIENTS * sizeof(int));
 
     for (int i = 0; i < MAX_CLIENTS; i++) {
         receiver->ingoing_frames_head_ptr_map[i] = NULL;
@@ -39,7 +38,8 @@ void handle_incoming_msgs(Receiver* receiver,
         free(ll_inmsg_node);
         free(raw_char_buf);
 
-        if (ingoing_frame->dst_id != receiver->recv_id) {
+        // Validate frame
+        if (ingoing_frame->dst_id != receiver->recv_id || ingoing_frame->checksum != checksum(ingoing_frame) || (ingoing_frame->seq_num != 0 && ingoing_frame->seq_num != 1) ) {
             free(ingoing_frame);
             continue;
         }
@@ -49,6 +49,8 @@ void handle_incoming_msgs(Receiver* receiver,
         ack->seq_num = ingoing_frame->seq_num;
         ack->src_id = ingoing_frame->src_id;
         ack->dst_id = ingoing_frame->dst_id;
+        ack->checksum = checksum(ack);
+
         ll_append_node(outgoing_frames_head_ptr, ack);
 
         if (receiver->last_received_seq_num_map[ingoing_frame->src_id] != ingoing_frame->seq_num) { // New Frame
@@ -60,7 +62,7 @@ void handle_incoming_msgs(Receiver* receiver,
                 char* msg = calloc(frames * FRAME_PAYLOAD_SIZE + 1, sizeof(char));
                 int char_idx = 0;
 
-                while (frames > 0) {
+                while (frames > 0) { // Loop through all the frames and append to msg
                     LLnode* cur_node = ll_pop_node(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id);
                     Frame * cur_frame = cur_node->value;
                     for (int i = 0; i < cur_frame->length; i++) {
@@ -74,10 +76,7 @@ void handle_incoming_msgs(Receiver* receiver,
                 printf("<RECV_%d>:[%s]\n", receiver->recv_id, msg);
                 free(msg);
             }
-        } else {
-//            printf("duplicate\n");
         }
-
         free(ingoing_frame);
     }
 }
