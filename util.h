@@ -30,6 +30,8 @@ long timeval_usecdiff(struct timeval*, struct timeval*);
 char* convert_frame_to_char(Frame*);
 Frame* convert_char_to_frame(char*);
 
-int min(int a, int b);
+int checksum(Frame* frame, int g);
 
+int min(int a, int b);
+Frame* copy_frame(Frame* frame);
 #endif

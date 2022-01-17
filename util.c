@@ -107,8 +107,25 @@ Frame* convert_char_to_frame(char* char_buf) {
     return frame;
 }
 
+Frame* copy_frame(Frame* frame) {
+    Frame* new_frame = malloc(sizeof(Frame));
+    memcpy(new_frame, (char *) frame, sizeof(Frame));
+    return (Frame *) new_frame;
+}
+
 int min(int a, int b) {
     return a < b ? a : b;
 }
+
+int checksum(Frame* frame, int g)  {
+    int sum = 0;
+    char* data = convert_frame_to_char(frame);
+    for (int i = 0; i < MAX_FRAME_SIZE - 1; i++) {
+        sum += (int) data[i];
+    }
+    free(data);
+    return sum % g;
+}
+
 
 

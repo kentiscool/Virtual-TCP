@@ -27,8 +27,6 @@ void handle_incoming_msgs(Receiver* receiver,
     //    4) Acknowledge that this frame was received
     int incoming_msgs_length = ll_get_length(receiver->input_framelist_head);
 
-    LLnode* outgoing_frames_head = NULL;
-
     while (incoming_msgs_length > 0) {
         // Pop a node off the front of the link list and update the count
         LLnode* ll_inmsg_node = ll_pop_node(&receiver->input_framelist_head);
@@ -55,23 +53,29 @@ void handle_incoming_msgs(Receiver* receiver,
 
         if (receiver->last_received_seq_num_map[ingoing_frame->src_id] != ingoing_frame->seq_num) { // New Frame
             // Retrieve data and save to buffer
-            char* segment = malloc(ingoing_frame->length);
-            memcpy(segment, ingoing_frame->data,ingoing_frame->length);
-            ll_append_node(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id, segment);
-
+            ll_append_node(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id, copy_frame(ingoing_frame));
+            receiver->last_received_seq_num_map[ingoing_frame->src_id] = ingoing_frame->seq_num;
             if (ingoing_frame->is_last == 1) { // Once all frames are collected, print the message.
                 int frames = ll_get_length(*(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id));
-                char* msg = malloc(frames * FRAME_PAYLOAD_SIZE);
+                char* msg = calloc(frames * FRAME_PAYLOAD_SIZE + 1, sizeof(char));
+                int char_idx = 0;
+
                 while (frames > 0) {
                     LLnode* cur_node = ll_pop_node(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id);
-                    char* cur_segment = cur_node->value;
-                    strcat(msg, cur_segment);
+                    Frame * cur_frame = cur_node->value;
+                    for (int i = 0; i < cur_frame->length; i++) {
+                        msg[char_idx + i] = cur_frame->data[i];
+                    }
+                    char_idx += cur_frame->length;
+
                     ll_destroy_node(cur_node);
-                    frames = ll_get_length(*(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id));
+                    frames -= 1;
                 }
                 printf("<RECV_%d>:[%s]\n", receiver->recv_id, msg);
                 free(msg);
             }
+        } else {
+//            printf("duplicate\n");
         }
 
         free(ingoing_frame);
@@ -141,11 +145,10 @@ void* run_receiver(void* input_receiver) {
         while (ll_outgoing_frame_length > 0) {
             LLnode* ll_outframe_node = ll_pop_node(&outgoing_frames_head);
             char* char_buf = (char*) ll_outframe_node->value;
-            Frame* ack = convert_char_to_frame(char_buf);
 
             // The following function frees the memory for the char_buf object
             send_msg_to_senders(char_buf);
-
+//            printf("sending ack\n");
             // Free up the ll_outframe_node
             free(ll_outframe_node);
 

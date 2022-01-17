@@ -48,7 +48,7 @@ struct LLnode_t {
 typedef struct LLnode_t LLnode;
 
 #define MAX_FRAME_SIZE 64
-
+#define GENERATOR 9
 // TODO: You should change this!
 // Remember, your frame can be AT MOST 64 bytes!
 #define FRAME_PAYLOAD_SIZE 59
@@ -59,6 +59,7 @@ struct Frame_t {
     unsigned char seq_num;
     char is_last;
     char data[FRAME_PAYLOAD_SIZE];
+//    unsigned int checksum;
 };
 typedef struct Frame_t Frame;
 
@@ -75,10 +76,8 @@ struct Receiver_t {
     pthread_cond_t buffer_cv;
     LLnode* input_framelist_head;
     int recv_id;
-
     LLnode** ingoing_frames_head_ptr_map;
     int last_received_seq_num_map[MAX_CLIENTS];
-
 };
 
 struct Sender_t {
@@ -97,7 +96,8 @@ struct Sender_t {
     LLnode* frame_buffer_head;
     Frame* last_sent_frame;
 
-    bool blocked;
+    struct timeval timeout;
+    int sent_frames_map[MAX_CLIENTS];
 };
 
 enum SendFrame_DstType { ReceiverDst, SenderDst } SendFrame_DstType;
