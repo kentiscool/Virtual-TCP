@@ -3,7 +3,9 @@
 ### Introduction
 This is an implementation of the __Data Link Layer protocol__ that facilitates communication between 
 multiple hosts(threads). Each host can communicate with up to 256 other hosts. A host can only act as 
-either a __sender__ or __receiver__.
+either a __sender__ or __receiver__. Tolerant against dropped and corrupted frames. A Sender will keep 
+on sending the same frame every 0.01 seconds until an acknowledgement is received. A Receiver will only send acknowledgements
+if the received frame passes a checksum even if it's a duplicate.
 
 ```
 Transaction between Sender and Receiver
