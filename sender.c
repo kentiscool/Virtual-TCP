@@ -15,7 +15,7 @@ void init_sender(Sender* sender, int id) {
     gettimeofday(&sender->timeout, NULL);
 
     for (int i = 0; i < MAX_CLIENTS; i++) {
-        sender->sent_frames_map[i] = 0;
+        sender->last_sent_seq_num_map[i] = 0;
     }
 }
 
@@ -82,10 +82,10 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
             outgoing_frame->src_id = outgoing_cmd->src_id;
             outgoing_frame->dst_id = outgoing_cmd->dst_id;
-            outgoing_frame->seq_num = sender->sent_frames_map[outgoing_frame->dst_id] % 2;
+            outgoing_frame->seq_num = sender->last_sent_seq_num_map[outgoing_frame->dst_id] % 2;
 
             // update count
-            sender->sent_frames_map[outgoing_frame->dst_id]++;
+            sender->last_sent_seq_num_map[outgoing_frame->dst_id]++;
 
             // Determine if last frame
             if (remaining > FRAME_PAYLOAD_SIZE) {

@@ -97,7 +97,7 @@ struct Sender_t {
     Frame* last_sent_frame;
 
     struct timeval timeout;
-    int sent_frames_map[MAX_CLIENTS];
+    int last_sent_seq_num_map[MAX_CLIENTS];
 };
 
 enum SendFrame_DstType { ReceiverDst, SenderDst } SendFrame_DstType;
