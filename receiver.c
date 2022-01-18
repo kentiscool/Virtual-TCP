@@ -19,11 +19,6 @@ void init_receiver(Receiver* receiver, int id) {
 
 void handle_incoming_msgs(Receiver* receiver,
                           LLnode** outgoing_frames_head_ptr) {
-    // TODO: Suggested steps for handling incoming frames
-    //    1) Dequeue the Frame from the sender->input_framelist_head
-    //    2) Convert the char * buffer to a Frame data type
-    //    3) Check whether the frame is for this receiver
-    //    4) Acknowledge that this frame was received
     int incoming_msgs_length = ll_get_length(receiver->input_framelist_head);
 
     while (incoming_msgs_length > 0) {
@@ -89,14 +84,6 @@ void* run_receiver(void* input_receiver) {
     Receiver* receiver = (Receiver*) input_receiver;
     LLnode* outgoing_frames_head; // Chanel where all messages will be sent through
 
-    // This incomplete receiver thread, at a high level, loops as follows:
-    // 1. Determine the next time the thread should wake up if there is nothing
-    // in the incoming queue(s)
-    // 2. Grab the mutex protecting the input_msg queue
-    // 3. Dequeues messages from the input_msg queue and prints them
-    // 4. Releases the lock
-    // 5. Sends out any outgoing messages
-
     while (1) {
         // NOTE: Add outgoing messages to the outgoing_frames_head pointer
         outgoing_frames_head = NULL;
@@ -138,7 +125,6 @@ void* run_receiver(void* input_receiver) {
 
         pthread_mutex_unlock(&receiver->buffer_mutex);
 
-        // CHANGE THIS AT YOUR OWN RISK!
         // Send out all the frames user has appended to the outgoing_frames list
         int ll_outgoing_frame_length = ll_get_length(outgoing_frames_head);
         while (ll_outgoing_frame_length > 0) {
@@ -147,7 +133,7 @@ void* run_receiver(void* input_receiver) {
 
             // The following function frees the memory for the char_buf object
             send_msg_to_senders(char_buf);
-//            printf("sending ack\n");
+
             // Free up the ll_outframe_node
             free(ll_outframe_node);
 

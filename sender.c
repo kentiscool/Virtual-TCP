@@ -84,7 +84,7 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             outgoing_frame->dst_id = outgoing_cmd->dst_id;
             outgoing_frame->seq_num = sender->last_sent_seq_num_map[outgoing_frame->dst_id] % 2;
 
-            // update count
+            // Update count
             sender->last_sent_seq_num_map[outgoing_frame->dst_id]++;
 
             // Determine if last frame
@@ -139,14 +139,6 @@ void* run_sender(void* input_sender) {
     struct timeval* expiring_timeval;
     long sleep_usec_time, sleep_sec_time;
     outgoing_frames_head = NULL;
-
-    // This incomplete sender thread, at a high level, loops as follows:
-    // 1. Determine the next time the thread should wake up
-    // 2. Grab the mutex protecting the input_cmd/inframe queues
-    // 3. Dequeues messages from the input queue and adds them to the
-    // outgoing_frames list
-    // 4. Releases the lock
-    // 5. Sends out the messages
 
     while (1) {
 
@@ -217,7 +209,6 @@ void* run_sender(void* input_sender) {
             handle_timedout_frames(sender, &outgoing_frames_head);
         }
 
-        // CHANGE THIS AT YOUR OWN RISK!
         // Send out all the frames
         int ll_outgoing_frame_length = ll_get_length(outgoing_frames_head);
         while (ll_outgoing_frame_length > 0) {

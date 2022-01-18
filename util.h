@@ -26,7 +26,6 @@ void print_cmd(Cmd*);
 // Time functions
 long timeval_usecdiff(struct timeval*, struct timeval*);
 
-// TODO: Implement these functions
 char* convert_frame_to_char(Frame*);
 Frame* convert_char_to_frame(char*);
 
