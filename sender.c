@@ -22,6 +22,9 @@ void init_sender(Sender* sender, int id) {
 struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
     // TODO: You should fill in this function so that it returns the next
     // timeout that should occur
+    if (sender->last_sent_frame == NULL) {
+        return NULL;
+    }
     return &sender->timeout;
 }
 
@@ -204,23 +207,27 @@ void* run_sender(void* input_sender) {
 
         handle_input_cmds(sender, &outgoing_frames_head);
 
+        if (expiring_timeval != NULL) {
+            long time_diff_sec = timeval_usecdiff(&curr_timeval, expiring_timeval);
+            if (time_diff_sec <= 0 && sender->last_sent_frame != NULL && ll_get_length(outgoing_frames_head) == 0) {
+                handle_timedout_frames(sender, &outgoing_frames_head);
+            }
+        }
+
         pthread_mutex_unlock(&sender->buffer_mutex);
 
         // Handle timeout
-        long time_diff_sec = timeval_usecdiff(&curr_timeval, expiring_timeval) / 1000000;
-        if (time_diff_sec < 0 && sender->last_sent_frame != NULL && ll_get_length(outgoing_frames_head) == 0) {
-            handle_timedout_frames(sender, &outgoing_frames_head);
-        }
+
 
         // Send out all the frames
         int ll_outgoing_frame_length = ll_get_length(outgoing_frames_head);
         while (ll_outgoing_frame_length > 0) {
             LLnode* ll_outframe_node = ll_pop_node(&outgoing_frames_head);
-            send_msg_to_receivers(convert_frame_to_char(ll_outframe_node->value));
             struct timeval next_time_out = curr_timeval;
-            next_time_out.tv_sec = (next_time_out.tv_usec + 90000) / 1000000;
+            next_time_out.tv_sec = (next_time_out.tv_usec + 90000) / 1000000 + next_time_out.tv_sec;
             next_time_out.tv_usec = (next_time_out.tv_usec + 90000) % 1000000;
             sender->timeout = next_time_out;
+            send_msg_to_receivers(convert_frame_to_char(ll_outframe_node->value));
 
             ll_destroy_node(ll_outframe_node);
 
