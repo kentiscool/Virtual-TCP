@@ -35,7 +35,10 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     LLnode* input_node = ll_pop_node(&sender->input_framelist_head);
     Frame* ack = input_node->value; // ack will be free'd via ll_destroy_node(input_node)
 
-    if (ack->src_id == sender->send_id && ack->seq_num == sender->last_sent_frame->seq_num && checksum(ack) == ack->checksum) {
+    if (ack->src_id == sender->send_id &&
+        sender->last_sent_frame != NULL &&
+        ack->seq_num == sender->last_sent_frame->seq_num &&
+        checksum(ack) == ack->checksum) {
         int buffer_length = ll_get_length(sender->frame_buffer_head);
         if (buffer_length > 0) { // Send next frame
             if (sender->last_sent_frame != NULL) {
@@ -60,13 +63,13 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     while (input_cmd_length > 0) {
         // Pop a node off and update the input_cmd_length
         LLnode* ll_input_cmd_node = ll_pop_node(&sender->input_cmdlist_head);
-        input_cmd_length -= 1;
+        input_cmd_length = ll_get_length(sender->input_cmdlist_head);
 
         // Cast to Cmd type and free up the memory for the node
         Cmd* outgoing_cmd = (Cmd*) ll_input_cmd_node->value;
         free(ll_input_cmd_node);
 
-        // Ignore if message destination is wrong
+        // Ignore if message src is wrong
         if (outgoing_cmd->src_id != sender->send_id) {
             free(outgoing_cmd->message);
             free(outgoing_cmd);
@@ -215,8 +218,8 @@ void* run_sender(void* input_sender) {
             LLnode* ll_outframe_node = ll_pop_node(&outgoing_frames_head);
             send_msg_to_receivers(convert_frame_to_char(ll_outframe_node->value));
             struct timeval next_time_out = curr_timeval;
-            next_time_out.tv_sec = (next_time_out.tv_sec + 90000) / 1000000;
-            next_time_out.tv_usec = (next_time_out.tv_sec + 90000) % 1000000;
+            next_time_out.tv_sec = (next_time_out.tv_usec + 90000) / 1000000;
+            next_time_out.tv_usec = (next_time_out.tv_usec + 90000) % 1000000;
             sender->timeout = next_time_out;
 
             ll_destroy_node(ll_outframe_node);
