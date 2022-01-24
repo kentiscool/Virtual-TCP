@@ -50,7 +50,6 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             LLnode* new_frame_node = ll_pop_node(&sender->frame_buffer_head);
             Frame* new_frame = new_frame_node->value;
             ll_append_node(outgoing_frames_head_ptr, copy_frame(new_frame));
-            sender->last_sent_frame = copy_frame(new_frame);
             ll_destroy_node(new_frame_node);
         } else {
             sender->last_sent_frame = NULL;
@@ -227,6 +226,7 @@ void* run_sender(void* input_sender) {
             next_time_out.tv_sec = (next_time_out.tv_usec + 90000) / 1000000 + next_time_out.tv_sec;
             next_time_out.tv_usec = (next_time_out.tv_usec + 90000) % 1000000;
             sender->timeout = next_time_out;
+            sender->last_sent_frame = copy_frame(ll_outframe_node->value);
             send_msg_to_receivers(convert_frame_to_char(ll_outframe_node->value));
 
             ll_destroy_node(ll_outframe_node);
