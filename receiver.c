@@ -25,7 +25,6 @@ void handle_incoming_msgs(Receiver* receiver,
         // Pop a node off the front of the link list and update the count
         LLnode* ll_inmsg_node = ll_pop_node(&receiver->input_framelist_head);
         incoming_msgs_length = ll_get_length(receiver->input_framelist_head);
-
         char* raw_char_buf = ll_inmsg_node->value;
 
         Frame* ingoing_frame = convert_char_to_frame(raw_char_buf);
@@ -132,6 +131,7 @@ void* run_receiver(void* input_receiver) {
             char* char_buf = (char*) ll_outframe_node->value;
 
             // The following function frees the memory for the char_buf object
+
             send_msg_to_senders(char_buf);
 
             // Free up the ll_outframe_node

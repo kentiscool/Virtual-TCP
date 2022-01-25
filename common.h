@@ -78,6 +78,7 @@ struct Receiver_t {
     int recv_id;
     LLnode** ingoing_frames_head_ptr_map;
     int last_received_seq_num_map[MAX_CLIENTS];
+
 };
 
 struct Sender_t {
@@ -98,6 +99,8 @@ struct Sender_t {
 
     struct timeval timeout;
     int last_sent_seq_num_map[MAX_CLIENTS];
+
+    bool acknowledged;
 };
 
 enum SendFrame_DstType { ReceiverDst, SenderDst } SendFrame_DstType;

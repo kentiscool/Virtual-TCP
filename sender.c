@@ -17,6 +17,8 @@ void init_sender(Sender* sender, int id) {
     for (int i = 0; i < MAX_CLIENTS; i++) {
         sender->last_sent_seq_num_map[i] = 0;
     }
+
+    sender->acknowledged = true;
 }
 
 struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
@@ -37,9 +39,8 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     // Retrieve ack from input_framelist_head
     LLnode* input_node = ll_pop_node(&sender->input_framelist_head);
     Frame* ack = input_node->value; // ack will be free'd via ll_destroy_node(input_node)
-
     if (ack->src_id == sender->send_id &&
-        sender->last_sent_frame != NULL &&
+        !sender->acknowledged &&
         ack->seq_num == sender->last_sent_frame->seq_num &&
         checksum(ack) == ack->checksum) {
         int buffer_length = ll_get_length(sender->frame_buffer_head);
@@ -51,9 +52,12 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             Frame* new_frame = new_frame_node->value;
             ll_append_node(outgoing_frames_head_ptr, copy_frame(new_frame));
             ll_destroy_node(new_frame_node);
+            sender->acknowledged = false;
         } else {
+            sender->acknowledged = true;
             sender->last_sent_frame = NULL;
         }
+
     }
 
     ll_destroy_node(input_node);
@@ -114,14 +118,14 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
             outgoing_frame->checksum = checksum(outgoing_frame);
 
             int buffer_length = ll_get_length(sender->frame_buffer_head);
-            if (buffer_length == 0 && ll_get_length(*outgoing_frames_head_ptr) == 0) {
+            if (sender->acknowledged) {
                 ll_append_node(outgoing_frames_head_ptr, copy_frame(outgoing_frame));
                 sender->last_sent_frame = copy_frame(outgoing_frame);
                 free(outgoing_frame);
             } else {
                 ll_append_node(&sender->frame_buffer_head, outgoing_frame);
             }
-
+            sender->acknowledged = false;
         }
 
         free(outgoing_cmd->message);
@@ -227,6 +231,8 @@ void* run_sender(void* input_sender) {
             next_time_out.tv_usec = (next_time_out.tv_usec + 90000) % 1000000;
             sender->timeout = next_time_out;
             sender->last_sent_frame = copy_frame(ll_outframe_node->value);
+            Frame* f = ll_outframe_node->value;
+
             send_msg_to_receivers(convert_frame_to_char(ll_outframe_node->value));
 
             ll_destroy_node(ll_outframe_node);
