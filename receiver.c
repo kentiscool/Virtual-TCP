@@ -9,12 +9,67 @@ void init_receiver(Receiver* receiver, int id) {
 
     for (int i = 0; i < MAX_CLIENTS; i++) {
         receiver->ingoing_frames_head_ptr_map[i] = NULL;
+        receiver->LCA[i] = 0;
+        for (int j = 0; j < UINT8_MAX; j++) {
+            receiver->frame_buffer[i][j] = NULL;
+        }
+    }
+}
+
+char* print_buffer(Receiver* receiver, int src_id, uint8_t last_seq_num) {
+    int length = 0;
+    int idx = last_seq_num;
+    while (true) {
+        length += receiver->frame_buffer[src_id][idx]->length;
+        if (receiver->frame_buffer[src_id][idx]->is_first == 1) {
+            break;
+        }
+        idx = prev_seq(idx);
     }
 
-    for (int i = 0; i < MAX_CLIENTS; i++) {
-        receiver->last_received_seq_num_map[i] = -1;
+    char* msg = calloc(length, sizeof(char));
+    int count = 0;
+    while (true) {
+        for (int i = 0; i < receiver->frame_buffer[src_id][idx]->length; i = next_seq(i)) {
+            msg[count + i] = receiver->frame_buffer[src_id][idx]->data[i];
+        }
+        if (receiver->frame_buffer[src_id][idx]->is_last == 1) {
+            break;
+        }
+        count += receiver->frame_buffer[src_id][idx]->length;
+        idx = next_seq(idx);
     }
+    return msg;
+}
 
+void clean_buffer(Receiver* receiver, int src_id, uint8_t last_seq_num) {
+    while (true) {
+        bool stop = receiver->frame_buffer[src_id][last_seq_num]->is_first == 1;
+        free(receiver->frame_buffer[src_id][last_seq_num]);
+        receiver->frame_buffer[src_id][last_seq_num] = NULL;
+        if (stop) {
+            return;
+        }
+        last_seq_num = prev_seq(last_seq_num);
+    }
+}
+
+int calc_LCA(Receiver* receiver, int src_id, uint8_t last_seq_num) {
+    if (!within_window(last_seq_num, receiver->LCA[src_id])) {
+        return receiver->LCA[src_id];
+    }
+    uint8_t idx = next_seq(last_seq_num);
+
+    while (true) {
+        if (idx == 0) {
+            idx++;
+            continue;
+        }
+        if (receiver->frame_buffer[src_id][idx] == NULL) {
+            return max_seq(prev_seq(idx), receiver->LCA[src_id]);
+        }
+        idx = next_seq(idx);
+    }
 }
 
 void handle_incoming_msgs(Receiver* receiver,
@@ -33,44 +88,42 @@ void handle_incoming_msgs(Receiver* receiver,
         free(raw_char_buf);
 
         // Validate frame
-        if (ingoing_frame->dst_id != receiver->recv_id || ingoing_frame->checksum != checksum(ingoing_frame) || (ingoing_frame->seq_num != 0 && ingoing_frame->seq_num != 1) ) {
+        if (ingoing_frame->dst_id != receiver->recv_id) {
             free(ingoing_frame);
             continue;
         }
 
-        // Send ack
-        Frame* ack = malloc(MAX_FRAME_SIZE);
-        ack->seq_num = ingoing_frame->seq_num;
-        ack->src_id = ingoing_frame->src_id;
-        ack->dst_id = ingoing_frame->dst_id;
-        ack->checksum = checksum(ack);
+        if (within_window(ingoing_frame->seq_num, receiver->LCA[ingoing_frame->src_id])) {
+            // Insert to buffer
+            receiver->frame_buffer[ingoing_frame->src_id][ingoing_frame->seq_num] = malloc(sizeof(Frame));
+            memcpy(receiver->frame_buffer[ingoing_frame->src_id][ingoing_frame->seq_num], ingoing_frame, sizeof(Frame));
 
-        ll_append_node(outgoing_frames_head_ptr, ack);
+            // Update LCA
+            uint8_t new_LCA = calc_LCA(receiver, ingoing_frame->src_id, receiver->LCA[ingoing_frame->src_id]);
+            receiver->LCA[ingoing_frame->src_id] = new_LCA;
 
-        if (receiver->last_received_seq_num_map[ingoing_frame->src_id] != ingoing_frame->seq_num) { // New Frame
-            // Retrieve data and save to buffer
-            ll_append_node(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id, copy_frame(ingoing_frame));
-            receiver->last_received_seq_num_map[ingoing_frame->src_id] = ingoing_frame->seq_num;
-            if (ingoing_frame->is_last == 1) { // Once all frames are collected, print the message.
-                int frames = ll_get_length(*(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id));
-                char* msg = calloc(frames * FRAME_PAYLOAD_SIZE + 1, sizeof(char));
-                int char_idx = 0;
+            Frame* f = receiver->frame_buffer[ingoing_frame->src_id][receiver->LCA[ingoing_frame->src_id]];
 
-                while (frames > 0) { // Loop through all the frames and append to msg
-                    LLnode* cur_node = ll_pop_node(receiver->ingoing_frames_head_ptr_map + ingoing_frame->src_id);
-                    Frame * cur_frame = cur_node->value;
-                    for (int i = 0; i < cur_frame->length; i++) {
-                        msg[char_idx + i] = cur_frame->data[i];
-                    }
-                    char_idx += cur_frame->length;
-
-                    ll_destroy_node(cur_node);
-                    frames -= 1;
-                }
+            // Check if complete
+            if (receiver->frame_buffer[ingoing_frame->src_id][new_LCA] != NULL && receiver->frame_buffer[ingoing_frame->src_id][new_LCA]->is_last == 1) {
+                char* msg = print_buffer(receiver, ingoing_frame->src_id, receiver->LCA[ingoing_frame->src_id]);
+                clean_buffer(receiver, ingoing_frame->src_id, receiver->LCA[ingoing_frame->src_id]);
                 printf("<RECV_%d>:[%s]\n", receiver->recv_id, msg);
                 free(msg);
             }
         }
+
+        // Send ack
+        Frame* ack = malloc(sizeof(Frame));
+        ack->seq_num = receiver->LCA[ingoing_frame->src_id];
+        ack->src_id = ingoing_frame->src_id;
+        ack->dst_id = ingoing_frame->dst_id;
+        int temp = ll_get_length(*outgoing_frames_head_ptr);
+
+
+        ll_append_node(outgoing_frames_head_ptr, ack);
+        temp = ll_get_length(*outgoing_frames_head_ptr);
+
         free(ingoing_frame);
     }
 }
@@ -128,14 +181,12 @@ void* run_receiver(void* input_receiver) {
         int ll_outgoing_frame_length = ll_get_length(outgoing_frames_head);
         while (ll_outgoing_frame_length > 0) {
             LLnode* ll_outframe_node = ll_pop_node(&outgoing_frames_head);
-            char* char_buf = (char*) ll_outframe_node->value;
+            char* char_buf = convert_frame_to_char(ll_outframe_node->value);
 
             // The following function frees the memory for the char_buf object
-
             send_msg_to_senders(char_buf);
-
-            // Free up the ll_outframe_node
-            free(ll_outframe_node);
+            Frame* frame = ll_outframe_node->value;
+            ll_destroy_node(ll_outframe_node);
 
             ll_outgoing_frame_length = ll_get_length(outgoing_frames_head);
         }

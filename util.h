@@ -32,4 +32,10 @@ Frame* convert_char_to_frame(char*);
 int checksum(Frame* frame);
 
 Frame* copy_frame(Frame* frame);
+
+bool within_window(uint8_t seq_num, uint8_t LAR);
+
+uint8_t next_seq(uint8_t seq_num);
+uint8_t prev_seq(uint8_t seq_num);
+uint8_t max_seq(uint8_t a, uint8_t b);
 #endif

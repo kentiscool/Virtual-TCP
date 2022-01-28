@@ -1,4 +1,5 @@
 #include "util.h"
+#include <stdint.h>
 
 // Linked list functions
 int ll_get_length(LLnode* head) {
@@ -121,6 +122,38 @@ int checksum(Frame* frame)  {
     }
     free(data);
     return sum;
+}
+
+bool within_window(uint8_t seq_num, uint8_t LAR) {
+    if (seq_num >= LAR) {
+        return seq_num - LAR < WINDOW_SIZE;
+    } else {
+        return (UINT8_MAX - LAR) + seq_num < WINDOW_SIZE;
+    }
+}
+
+uint8_t next_seq(uint8_t seq_num) {
+    if (seq_num == UINT8_MAX) {
+        return 1;
+    } else {
+        return seq_num + 1;
+    }
+}
+
+uint8_t prev_seq(uint8_t seq_num) {
+    if (seq_num == 1) {
+        return UINT8_MAX;
+    } else {
+        return seq_num - 1;
+    }
+}
+
+uint8_t max_seq(uint8_t a, uint8_t b) {
+    uint8_t diff = a > b ? a - b : b - a;
+    if (diff > WINDOW_SIZE) {
+        return a > b ? b : a;
+    }
+    return a > b ? a : b;
 }
 
 

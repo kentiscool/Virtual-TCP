@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #define MAX_COMMAND_LENGTH 16
 #define AUTOMATED_FILENAME 512
@@ -51,19 +52,27 @@ typedef struct LLnode_t LLnode;
 #define GENERATOR 9
 // TODO: You should change this!
 // Remember, your frame can be AT MOST 64 bytes!
-#define FRAME_PAYLOAD_SIZE 51
+#define FRAME_PAYLOAD_SIZE 58
 struct Frame_t {
-    unsigned char src_id;
-    unsigned char dst_id;
-    unsigned char length;
-    unsigned char seq_num;
-    char is_last;
+    unsigned char src_id;           // 1b
+    unsigned char dst_id;           // 1b
+    unsigned char length;           // 1b
+    uint8_t seq_num;                // 1b
+    char is_first;                  // 1b
+    char is_last;                   // 1b
     char data[FRAME_PAYLOAD_SIZE];
-    int checksum;
 };
 typedef struct Frame_t Frame;
 
-#define MAX_CLIENTS 256
+struct Timed_frame_t {
+    struct timeval timeout;
+    Frame frame;
+};
+
+typedef struct Timed_frame_t Timed_frame;
+
+#define MAX_CLIENTS 10
+#define WINDOW_SIZE 8
 
 // Receiver and sender data structures
 struct Receiver_t {
@@ -77,8 +86,8 @@ struct Receiver_t {
     LLnode* input_framelist_head;
     int recv_id;
     LLnode** ingoing_frames_head_ptr_map;
-    int last_received_seq_num_map[MAX_CLIENTS];
-
+    Frame* frame_buffer[MAX_CLIENTS][UINT8_MAX];
+    uint8_t LCA[MAX_CLIENTS];
 };
 
 struct Sender_t {
@@ -92,15 +101,13 @@ struct Sender_t {
     pthread_cond_t buffer_cv;
     LLnode* input_cmdlist_head;
     LLnode* input_framelist_head;
-    int send_id;
+    uint8_t send_id;
 
-    LLnode* frame_buffer_head;
-    Frame* last_sent_frame;
+    LLnode* frame_buffer[MAX_CLIENTS];
 
-    struct timeval timeout;
-    int last_sent_seq_num_map[MAX_CLIENTS];
-
-    bool acknowledged;
+    LLnode* timeout;
+    uint8_t LAR[MAX_CLIENTS];
+    uint8_t LFS[MAX_CLIENTS];
 };
 
 enum SendFrame_DstType { ReceiverDst, SenderDst } SendFrame_DstType;

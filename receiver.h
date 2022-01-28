@@ -18,5 +18,7 @@
 
 void init_receiver(Receiver*, int);
 void* run_receiver(void*);
-
+void clean_buffer(Receiver* receiver, int src_id, uint8_t last_seq_num);
+int calc_LCA(Receiver* receiver, int src_id, uint8_t last_seq_num);
+char* print_buffer(Receiver* receiver, int src_id, uint8_t last_seq_num);
 #endif
