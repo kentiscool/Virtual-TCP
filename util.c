@@ -125,6 +125,9 @@ int checksum(Frame* frame)  {
 }
 
 bool within_window(uint8_t seq_num, uint8_t LAR) {
+    if (seq_num == LAR) {
+        return false;
+    }
     if (seq_num >= LAR) {
         return seq_num - LAR < WINDOW_SIZE;
     } else {

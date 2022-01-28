@@ -21,24 +21,19 @@ void init_sender(Sender* sender, int id) {
 
 struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
     // TODO: You should fill in this function so that it returns the next timeout that should occur
-    int length = ll_get_length(sender->timeout);
-
-    while (length > 0) {
-        LLnode* expiring_frame_node = ll_pop_node(&sender->timeout);
-        Timed_frame* expiring_t_frame = expiring_frame_node->value;
-
-        Frame expiring_frame = expiring_t_frame->frame;
-        // Only testing for stale frames
-        if (!within_window(expiring_frame.seq_num, sender->LAR[expiring_frame.dst_id])) {
-            ll_destroy_node(expiring_frame_node);
-            struct timeval* timeout = malloc(sizeof(struct timeval));
-            memcpy(timeout, &expiring_t_frame->timeout, sizeof(struct timeval));
-            return timeout;
-        }
-        ll_destroy_node(expiring_frame_node);
-        length--;
+    if (sender->timeout == NULL) {
+        return NULL;
     }
-    return NULL;
+
+    while (sender->timeout != NULL) {
+        Frame expiring_frame = ((Timed_frame*)sender->timeout->value)->frame;
+        if (within_window(expiring_frame.seq_num, sender->LAR[expiring_frame.dst_id])) {
+            return &((Timed_frame*)sender->timeout->value)->timeout;
+        } else {
+            ll_destroy_node(ll_pop_node(&sender->timeout));
+        }
+    }
+
 }
 
 void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
@@ -150,7 +145,7 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
 
 void handle_timedout_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     // TODO: Handle timeout by resending the appropriate message
-    LLnode* expired_frame_node = ll_pop_node(&sender->timeout->value);
+    LLnode* expired_frame_node = ll_pop_node(&sender->timeout);
     Timed_frame* expired_t_frame = expired_frame_node->value;
     ll_append_node(outgoing_frames_head_ptr, copy_frame(&expired_t_frame->frame));
     ll_destroy_node(expired_frame_node);
@@ -235,7 +230,6 @@ void* run_sender(void* input_sender) {
             if (time_diff_sec <= 0 && ll_get_length(outgoing_frames_head) == 0) {
                 handle_timedout_frames(sender, &outgoing_frames_head);
             }
-            free(expiring_timeval);
         }
 
         pthread_mutex_unlock(&sender->buffer_mutex);

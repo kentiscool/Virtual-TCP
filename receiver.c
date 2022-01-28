@@ -1,4 +1,5 @@
 #include "receiver.h"
+#include <math.h>
 
 void init_receiver(Receiver* receiver, int id) {
     pthread_cond_init(&receiver->buffer_cv, NULL);
@@ -19,6 +20,7 @@ void init_receiver(Receiver* receiver, int id) {
 char* print_buffer(Receiver* receiver, int src_id, uint8_t last_seq_num) {
     int length = 0;
     int idx = last_seq_num;
+
     while (true) {
         length += receiver->frame_buffer[src_id][idx]->length;
         if (receiver->frame_buffer[src_id][idx]->is_first == 1) {
@@ -55,9 +57,6 @@ void clean_buffer(Receiver* receiver, int src_id, uint8_t last_seq_num) {
 }
 
 int calc_LCA(Receiver* receiver, int src_id, uint8_t last_seq_num) {
-    if (!within_window(last_seq_num, receiver->LCA[src_id])) {
-        return receiver->LCA[src_id];
-    }
     uint8_t idx = next_seq(last_seq_num);
 
     while (true) {
@@ -65,8 +64,11 @@ int calc_LCA(Receiver* receiver, int src_id, uint8_t last_seq_num) {
             idx++;
             continue;
         }
+
         if (receiver->frame_buffer[src_id][idx] == NULL) {
             return max_seq(prev_seq(idx), receiver->LCA[src_id]);
+        } else if (receiver->frame_buffer[src_id][idx]->is_last == 1){
+            return idx;
         }
         idx = next_seq(idx);
     }
@@ -105,9 +107,11 @@ void handle_incoming_msgs(Receiver* receiver,
             Frame* f = receiver->frame_buffer[ingoing_frame->src_id][receiver->LCA[ingoing_frame->src_id]];
 
             // Check if complete
-            if (receiver->frame_buffer[ingoing_frame->src_id][new_LCA] != NULL && receiver->frame_buffer[ingoing_frame->src_id][new_LCA]->is_last == 1) {
+            while (receiver->frame_buffer[ingoing_frame->src_id][new_LCA] != NULL && receiver->frame_buffer[ingoing_frame->src_id][new_LCA]->is_last == 1) {
                 char* msg = print_buffer(receiver, ingoing_frame->src_id, receiver->LCA[ingoing_frame->src_id]);
                 clean_buffer(receiver, ingoing_frame->src_id, receiver->LCA[ingoing_frame->src_id]);
+                new_LCA = calc_LCA(receiver, ingoing_frame->src_id, receiver->LCA[ingoing_frame->src_id]);
+                receiver->LCA[ingoing_frame->src_id] = new_LCA;
                 printf("<RECV_%d>:[%s]\n", receiver->recv_id, msg);
                 free(msg);
             }
