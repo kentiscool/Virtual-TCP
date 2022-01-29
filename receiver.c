@@ -90,7 +90,7 @@ void handle_incoming_msgs(Receiver* receiver,
         free(raw_char_buf);
 
         // Validate frame
-        if (ingoing_frame->dst_id != receiver->recv_id) {
+        if (!(ingoing_frame->dst_id == receiver->recv_id && ingoing_frame->crc == compute_crc(ingoing_frame))) {
             free(ingoing_frame);
             continue;
         }
@@ -103,8 +103,6 @@ void handle_incoming_msgs(Receiver* receiver,
             // Update LCA
             uint8_t new_LCA = calc_LCA(receiver, ingoing_frame->src_id, receiver->LCA[ingoing_frame->src_id]);
             receiver->LCA[ingoing_frame->src_id] = new_LCA;
-
-            Frame* f = receiver->frame_buffer[ingoing_frame->src_id][receiver->LCA[ingoing_frame->src_id]];
 
             // Check if complete
             while (receiver->frame_buffer[ingoing_frame->src_id][new_LCA] != NULL && receiver->frame_buffer[ingoing_frame->src_id][new_LCA]->is_last == 1) {
@@ -122,11 +120,8 @@ void handle_incoming_msgs(Receiver* receiver,
         ack->seq_num = receiver->LCA[ingoing_frame->src_id];
         ack->src_id = ingoing_frame->src_id;
         ack->dst_id = ingoing_frame->dst_id;
-        int temp = ll_get_length(*outgoing_frames_head_ptr);
-
 
         ll_append_node(outgoing_frames_head_ptr, ack);
-        temp = ll_get_length(*outgoing_frames_head_ptr);
 
         free(ingoing_frame);
     }

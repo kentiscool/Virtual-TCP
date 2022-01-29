@@ -38,4 +38,6 @@ bool within_window(uint8_t seq_num, uint8_t LAR);
 uint8_t next_seq(uint8_t seq_num);
 uint8_t prev_seq(uint8_t seq_num);
 uint8_t max_seq(uint8_t a, uint8_t b);
+
+unsigned int compute_crc(Frame* frame);
 #endif

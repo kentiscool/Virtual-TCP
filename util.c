@@ -29,7 +29,7 @@ void ll_append_node(LLnode** head_ptr, void* value) {
     // Init the value pntr
     head = (*head_ptr);
     new_node = (LLnode*) malloc(sizeof(LLnode));
-    new_node->value = (char *)value;
+    new_node->value = (char*) value;
     // The list is empty, no node is currently present
     if (head == NULL) {
         (*head_ptr) = new_node;
@@ -110,11 +110,11 @@ Frame* convert_char_to_frame(char* char_buf) {
 
 Frame* copy_frame(Frame* frame) {
     Frame* new_frame = malloc(sizeof(Frame));
-    memcpy(new_frame, (char *) frame, sizeof(Frame));
-    return (Frame *) new_frame;
+    memcpy(new_frame, (char*) frame, sizeof(Frame));
+    return (Frame*) new_frame;
 }
 
-int checksum(Frame* frame)  {
+int checksum(Frame* frame) {
     int sum = 0;
     char* data = convert_frame_to_char(frame);
     for (int i = 0; i < MAX_FRAME_SIZE - 8; i++) {
@@ -159,4 +159,28 @@ uint8_t max_seq(uint8_t a, uint8_t b) {
     return a > b ? a : b;
 }
 
+unsigned int compute_crc(Frame* frame) {
+    const unsigned int polynomial = 0x04C11DB7; /* divisor is 32bit */
+    unsigned int crc = 0;                       /* CRC value is 32bit */
+    const data_size = MAX_FRAME_SIZE - 4;
+    char bytes[data_size];
 
+    memcpy(bytes, frame, sizeof(char) * data_size);
+
+    // Byte Loop
+    for (int i = 0; i < data_size; i++) {
+        char b = bytes[i];
+        crc ^= (unsigned int) (b << 24);
+        // Bit Loop
+        for (int i = 0; i < 8; i++) {
+            if ((crc & 0x80000000) != 0) /* test for MSB = bit 31 */
+            {
+                crc = (unsigned int) ((crc << 1) ^ polynomial);
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+
+    return crc;
+}

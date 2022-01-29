@@ -1,7 +1,7 @@
 #include "sender.h"
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <assert.h>
 
 void init_sender(Sender* sender, int id) {
     pthread_cond_init(&sender->buffer_cv, NULL);
@@ -20,20 +20,21 @@ void init_sender(Sender* sender, int id) {
 }
 
 struct timeval* sender_get_next_expiring_timeval(Sender* sender) {
-    // TODO: You should fill in this function so that it returns the next timeout that should occur
+    // TODO: You should fill in this function so that it returns the next
+    // timeout that should occur
     if (sender->timeout == NULL) {
         return NULL;
     }
 
     while (sender->timeout != NULL) {
-        Frame expiring_frame = ((Timed_frame*)sender->timeout->value)->frame;
-        if (within_window(expiring_frame.seq_num, sender->LAR[expiring_frame.dst_id])) {
-            return &((Timed_frame*)sender->timeout->value)->timeout;
+        Frame expiring_frame = ((Timed_frame*) sender->timeout->value)->frame;
+        if (within_window(expiring_frame.seq_num,
+                          sender->LAR[expiring_frame.dst_id])) {
+            return &((Timed_frame*) sender->timeout->value)->timeout;
         } else {
             ll_destroy_node(ll_pop_node(&sender->timeout));
         }
     }
-
 }
 
 void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
@@ -44,7 +45,8 @@ void handle_incoming_acks(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     LLnode* input_node = ll_pop_node(&sender->input_framelist_head);
 
     Frame* ack = input_node->value;
-    if (!(ack->src_id == sender->send_id && within_window(ack->seq_num, sender->LAR[ack->dst_id]))) {
+    if (!(ack->src_id == sender->send_id &&
+          within_window(ack->seq_num, sender->LAR[ack->dst_id]))) {
         ll_destroy_node(input_node);
         return;
     }
@@ -116,7 +118,7 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                 remaining -= FRAME_PAYLOAD_SIZE;
             } else {
                 outgoing_frame->is_last = 1;
-                outgoing_frame->length = remaining ; // +1 for null terminator
+                outgoing_frame->length = remaining; // +1 for null terminator
                 remaining = 0;
             }
 
@@ -125,12 +127,18 @@ void handle_input_cmds(Sender* sender, LLnode** outgoing_frames_head_ptr) {
                 outgoing_frame->data[i] = outgoing_cmd->message[i + idx];
             }
 
+            // Append CRC
+            outgoing_frame->crc = compute_crc(outgoing_frame);
+
             // append to frame or output buffer
-            if (outgoing_frame->seq_num < sender->LAR[outgoing_frame->dst_id] + WINDOW_SIZE) {
-                ll_append_node(outgoing_frames_head_ptr, copy_frame(outgoing_frame));
+            if (outgoing_frame->seq_num <
+                sender->LAR[outgoing_frame->dst_id] + WINDOW_SIZE) {
+                ll_append_node(outgoing_frames_head_ptr,
+                               copy_frame(outgoing_frame));
             } else {
                 Frame* copied_frame = copy_frame(outgoing_frame);
-                ll_append_node(&sender->frame_buffer[outgoing_cmd->dst_id], copied_frame);
+                ll_append_node(&sender->frame_buffer[outgoing_cmd->dst_id],
+                               copied_frame);
             }
 
             sender->LFS[outgoing_cmd->src_id] = seq_num;
@@ -147,7 +155,8 @@ void handle_timedout_frames(Sender* sender, LLnode** outgoing_frames_head_ptr) {
     // TODO: Handle timeout by resending the appropriate message
     LLnode* expired_frame_node = ll_pop_node(&sender->timeout);
     Timed_frame* expired_t_frame = expired_frame_node->value;
-    ll_append_node(outgoing_frames_head_ptr, copy_frame(&expired_t_frame->frame));
+    ll_append_node(outgoing_frames_head_ptr,
+                   copy_frame(&expired_t_frame->frame));
     ll_destroy_node(expired_frame_node);
 }
 
@@ -223,11 +232,12 @@ void* run_sender(void* input_sender) {
 
         handle_incoming_acks(sender, &outgoing_frames_head);
 
-
         // Handle timeout
         if (expiring_timeval != NULL) {
-            long time_diff_sec = timeval_usecdiff(&curr_timeval, expiring_timeval);
-            if (time_diff_sec <= 0 && ll_get_length(outgoing_frames_head) == 0) {
+            long time_diff_sec =
+                timeval_usecdiff(&curr_timeval, expiring_timeval);
+            if (time_diff_sec <= 0 &&
+                ll_get_length(outgoing_frames_head) == 0) {
                 handle_timedout_frames(sender, &outgoing_frames_head);
             }
         }
@@ -241,8 +251,11 @@ void* run_sender(void* input_sender) {
             Timed_frame* t_frame = malloc(sizeof(Timed_frame));
             Frame* frame = ll_outframe_node->value;
             t_frame->timeout = curr_timeval;
-            t_frame->timeout.tv_sec = (t_frame->timeout.tv_usec + 90000) / 1000000 + t_frame->timeout.tv_sec;
-            t_frame->timeout.tv_usec = (t_frame->timeout.tv_usec + 90000) % 1000000;
+            t_frame->timeout.tv_sec =
+                (t_frame->timeout.tv_usec + 90000) / 1000000 +
+                t_frame->timeout.tv_sec;
+            t_frame->timeout.tv_usec =
+                (t_frame->timeout.tv_usec + 90000) % 1000000;
             t_frame->frame = *frame;
             ll_append_node(&sender->timeout, t_frame);
 
